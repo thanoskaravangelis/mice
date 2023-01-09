@@ -11,6 +11,11 @@ import torch
 import torch.nn.functional as F
 from torch import backends
 
+import spacy
+from spacy import displacy
+
+nlp = spacy.load('en_core_web_sm')
+
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
 logging.basicConfig(format=FORMAT)
 
@@ -146,6 +151,16 @@ class Masker():
             span_idx -= 1    
 
         return grpd_editor_mask_indices, editor_mask_indices, masked_seg, label
+    
+    def ner_masker(editable_seg):
+        text = nlp(editable_Seg)
+        after_ner_lst = list()
+        counter = 0
+        for token in text:
+            if token.ent_type_=='':
+                after_ner_tuples_lst = after_ner_tuples_lst + [(token.text, token.ent_iob_, None)]
+            else:
+                after_ner_tuples_lst = after_ner_tuples_lst + [(token.text, token.ent_iob_, token.ent_type_)]
             
 class RandomMasker(Masker):
     """ Masks randomly chosen spans. """ 
@@ -412,7 +427,7 @@ class GradientMasker(Masker):
         return ig_grads    
         
     def get_important_editor_tokens(
-            self, editable_seg, pred_idx, editor_toks, 
+            self, editable_seg, pred_idx, editor_toks,
             labeled_instance=None, 
             predic_tok_start_idx=None, 
             predic_tok_end_idx=None, 
@@ -451,6 +466,8 @@ class GradientMasker(Masker):
 
         temp_tokenizer = self.predictor._dataset_reader._tokenizer
         all_predic_toks = temp_tokenizer.tokenize(editable_seg)
+        
+        ner_toks = self.ner_process(editable_seg)
         
         # TODO: Does NOT work for RACE
         # If labeled_instance is not supplied, create one
@@ -523,7 +540,7 @@ class GradientMasker(Masker):
         ordered_word_indices_by_grad = [self._get_word_positions(
             all_predic_toks[idx], editor_toks)[0] \
                     for idx in ordered_predic_tok_indices \
-                    if all_predic_toks[idx] not in self.predictor_special_toks]
+                    if all_predic_toks[idx] not in self.predictor_special_toks and ner_toks[idx][2] is None]
         ordered_word_indices_by_grad = [item for sublist in \
                 ordered_word_indices_by_grad for item in sublist]
         

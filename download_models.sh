@@ -1,3 +1,4 @@
+python -m spacy download en_core_web_sm;
 for TASK in imdb newsgroups race
 do	
 	mkdir -p trained_predictors/${TASK}/model

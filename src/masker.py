@@ -152,15 +152,15 @@ class Masker():
 
         return grpd_editor_mask_indices, editor_mask_indices, masked_seg, label
     
-    def ner_masker(editable_seg):
-        text = nlp(editable_Seg)
-        after_ner_lst = list()
-        counter = 0
+    def ner_masker(self, editable_seg):
+        text = nlp(editable_seg)
+        after_ner_tuples_lst = list()
         for token in text:
             if token.ent_type_=='':
                 after_ner_tuples_lst = after_ner_tuples_lst + [(token.text, token.ent_iob_, None)]
             else:
                 after_ner_tuples_lst = after_ner_tuples_lst + [(token.text, token.ent_iob_, token.ent_type_)]
+        return after_ner_tuples_lst
             
 class RandomMasker(Masker):
     """ Masks randomly chosen spans. """ 
@@ -467,7 +467,7 @@ class GradientMasker(Masker):
         temp_tokenizer = self.predictor._dataset_reader._tokenizer
         all_predic_toks = temp_tokenizer.tokenize(editable_seg)
         
-        ner_toks = self.ner_process(editable_seg)
+        ner_toks = self.ner_masker(editable_seg)
         
         # TODO: Does NOT work for RACE
         # If labeled_instance is not supplied, create one

@@ -537,7 +537,7 @@ class GradientMasker(Masker):
         ordered_predic_tok_indices = np.argsort(grad_magnitudes)[::-1]\
 
         logger = logging.getLogger("my-logger")
-        logger.info("All_predic_toks: ", all_predic_toks.len(), "Ner toks: ", ner_toks.len())
+        logger.info("All_predic_toks: ", len(all_predic_toks), "Ner toks: ", len(ner_toks))
         # List of tuples of (start, end) positions in the original inp to mask
         ordered_word_indices_by_grad = [self._get_word_positions(
             all_predic_toks[idx], editor_toks)[0] \

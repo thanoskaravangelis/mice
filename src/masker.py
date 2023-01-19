@@ -152,15 +152,19 @@ class Masker():
 
         return grpd_editor_mask_indices, editor_mask_indices, masked_seg, label
     
-    def ner_masker(self, editable_seg):
+    def ner_masker(self, editable_seg, all_predic_toks):
         text = nlp(editable_seg)
-        after_ner_tuples_lst = list()
+        after_ner_tuples_lst = [1] * len(all_predic_toks)
+        all_predic_new = [str(str(tok).replace('Ġ','')) for tok in all_predic_toks]
+        i=0
         for token in text:
-            if token.ent_type_=='':
-                after_ner_tuples_lst = after_ner_tuples_lst + [(token.text, token.ent_iob_, None)]
-            else:
-                after_ner_tuples_lst = after_ner_tuples_lst + [(token.text, token.ent_iob_, token.ent_type_)]
-        return after_ner_tuples_lst
+            if token.text in all_predic_new:
+                if token.ent_type_=='':
+                    after_ner_tuples_lst[i]=1
+                else:
+                    after_ner_tuples_lst[i]=0
+            i+=1
+        return text, after_ner_tuples_lst
             
 class RandomMasker(Masker):
     """ Masks randomly chosen spans. """ 
@@ -467,7 +471,7 @@ class GradientMasker(Masker):
         temp_tokenizer = self.predictor._dataset_reader._tokenizer
         all_predic_toks = temp_tokenizer.tokenize(editable_seg)
         
-        ner_toks = self.ner_masker(editable_seg)
+        ner_words, ner_toks = self.ner_masker(editable_seg, all_predic_toks)
         
         # TODO: Does NOT work for RACE
         # If labeled_instance is not supplied, create one
@@ -537,12 +541,14 @@ class GradientMasker(Masker):
         ordered_predic_tok_indices = np.argsort(grad_magnitudes)[::-1]\
 
         logger = logging.getLogger("my-logger")
-        logger.info("All_predic_toks: ", len(all_predic_toks), "Ner toks: ", len(ner_toks))
+        logger.info("All_predic_toks: ", str(all_predic_toks))
+        logger.info("All ner toks: ", str(ner_words), str(ner_toks))
+        logger.info("All_predic_toks: ", str(len(all_predic_toks)), "Ner toks: ", str(len(ner_toks)))
         # List of tuples of (start, end) positions in the original inp to mask
         ordered_word_indices_by_grad = [self._get_word_positions(
             all_predic_toks[idx], editor_toks)[0] \
                     for idx in ordered_predic_tok_indices \
-                    if all_predic_toks[idx] not in self.predictor_special_toks and ner_toks[idx][2] is None]
+                    if all_predic_toks[idx] not in self.predictor_special_toks and ner_toks[idx]==1]
         ordered_word_indices_by_grad = [item for sublist in \
                 ordered_word_indices_by_grad for item in sublist]
         

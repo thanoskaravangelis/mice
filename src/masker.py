@@ -153,12 +153,12 @@ class Masker():
     
     def ner_masker(self, editable_seg, all_predic_toks):
         text = nlp(editable_seg)
-        after_ner_tuples_lst = [1] * len(all_predic_toks)
+        after_ner_tuples_lst = [0] * len(all_predic_toks)
         all_predic_new = [str(str(tok).replace('Ġ','')) for tok in all_predic_toks]
         i=0
         for token in text:
             if str(token.text) in all_predic_new:
-                if token.tag_=='ADJ':
+                if token.pos_=='ADJ':
                     after_ner_tuples_lst[i]=1
                 else:
                     after_ner_tuples_lst[i]=0
@@ -470,7 +470,7 @@ class GradientMasker(Masker):
         temp_tokenizer = self.predictor._dataset_reader._tokenizer
         all_predic_toks = temp_tokenizer.tokenize(editable_seg)
         
-        #ner_words, ner_toks = self.ner_masker(editable_seg, all_predic_toks)
+        ner_words, ner_toks = self.ner_masker(editable_seg, all_predic_toks)
         
         # TODO: Does NOT work for RACE
         # If labeled_instance is not supplied, create one
@@ -543,7 +543,7 @@ class GradientMasker(Masker):
         ordered_word_indices_by_grad = [self._get_word_positions(
             all_predic_toks[idx], editor_toks)[0] \
                     for idx in ordered_predic_tok_indices \
-                    if all_predic_toks[idx] not in self.predictor_special_toks]
+                    if all_predic_toks[idx] not in self.predictor_special_toks and ner_toks[idx]==1]
         ordered_word_indices_by_grad = [item for sublist in \
                 ordered_word_indices_by_grad for item in sublist]
         

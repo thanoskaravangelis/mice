@@ -12,7 +12,6 @@ import torch.nn.functional as F
 from torch import backends
 
 import spacy
-from spacy import displacy
 
 nlp = spacy.load('en_core_web_sm')
 
@@ -158,8 +157,8 @@ class Masker():
         all_predic_new = [str(str(tok).replace('Ġ','')) for tok in all_predic_toks]
         i=0
         for token in text:
-            if token.text in all_predic_new:
-                if token.ent_type_=='':
+            if str(token.text) in all_predic_new:
+                if token.tag_=='ADJ':
                     after_ner_tuples_lst[i]=1
                 else:
                     after_ner_tuples_lst[i]=0
@@ -471,7 +470,7 @@ class GradientMasker(Masker):
         temp_tokenizer = self.predictor._dataset_reader._tokenizer
         all_predic_toks = temp_tokenizer.tokenize(editable_seg)
         
-        ner_words, ner_toks = self.ner_masker(editable_seg, all_predic_toks)
+        #ner_words, ner_toks = self.ner_masker(editable_seg, all_predic_toks)
         
         # TODO: Does NOT work for RACE
         # If labeled_instance is not supplied, create one
@@ -540,15 +539,11 @@ class GradientMasker(Masker):
         # Order Predictor tokens from largest to smallest gradient values 
         ordered_predic_tok_indices = np.argsort(grad_magnitudes)[::-1]\
 
-        logger = logging.getLogger("my-logger")
-        logger.info("All_predic_toks: ", str(all_predic_toks))
-        logger.info("All ner toks: ", str(ner_words), str(ner_toks))
-        logger.info("All_predic_toks: ", str(len(all_predic_toks)), "Ner toks: ", str(len(ner_toks)))
         # List of tuples of (start, end) positions in the original inp to mask
         ordered_word_indices_by_grad = [self._get_word_positions(
             all_predic_toks[idx], editor_toks)[0] \
                     for idx in ordered_predic_tok_indices \
-                    if all_predic_toks[idx] not in self.predictor_special_toks and ner_toks[idx]==1]
+                    if all_predic_toks[idx] not in self.predictor_special_toks]
         ordered_word_indices_by_grad = [item for sublist in \
                 ordered_word_indices_by_grad for item in sublist]
         

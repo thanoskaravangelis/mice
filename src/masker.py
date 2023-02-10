@@ -153,15 +153,15 @@ class Masker():
     
     def ner_masker(self, editable_seg, all_predic_toks):
         text = nlp(editable_seg)
-        after_ner_tuples_lst = [0] * len(all_predic_toks)
+        after_ner_tuples_lst = [0] * (len(all_predic_toks)+1)
         all_predic_new = [str(str(tok).replace('Ġ','')) for tok in all_predic_toks]
         i=0
         for token in text:
             if str(token.text) in all_predic_new:
                 if token.pos_=='ADJ':
-                    after_ner_tuples_lst[i]=1
+                    after_ner_tuples_lst[i+1]=1
                 else:
-                    after_ner_tuples_lst[i]=0
+                    after_ner_tuples_lst[i+1]=0
             i+=1
         return text, after_ner_tuples_lst
             

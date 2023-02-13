@@ -151,19 +151,25 @@ class Masker():
 
         return grpd_editor_mask_indices, editor_mask_indices, masked_seg, label
     
-    def ner_masker(self, editable_seg, all_predic_toks):
+    def ner_masker(self, editable_seg, all_predic_toks, search):
         text = nlp(editable_seg)
-        after_ner_tuples_lst = [0] * (len(all_predic_toks)+1)
+        after_ner_tuples_lst = []
+        # List of all tokens without the space token used by the T5Tokenizer -> 'Ġ'
         all_predic_new = [str(str(tok).replace('Ġ','')) for tok in all_predic_toks]
-        i=0
+        # List of all tokens united with the following token due to unexpected 'splits' of tokens e.g. ['app','le']->['apple']
+        all_predic_with_next = [(all_predic_new[i]+all_predic_new[i+1], all_predic_new[i], all_predic_new[i+1])  for i in range(len(all_predic_new)-1)]
         for token in text:
-            if str(token.text) in all_predic_new:
-                if token.pos_=='ADJ':
-                    after_ner_tuples_lst[i+1]=1
-                else:
-                    after_ner_tuples_lst[i+1]=0
-            i+=1
-        return text, after_ner_tuples_lst
+            token_text = str(token.text)
+            if token_text in all_predic_new:
+                if token.pos_==search:
+                    after_ner_tuples_lst.append((token_text))
+            elif token_text in list(zip(*all_predic_with_next))[0]:
+                idx = list(zip(*all_predic_with_next))[0].index(token_text)
+                if token.pos_==search:
+                    after_ner_tuples_lst.append(all_predic_with_next[idx][1])
+                    after_ner_tuples_lst.append(all_predic_with_next[idx][2])
+
+        return all_predic_new, after_ner_tuples_lst
             
 class RandomMasker(Masker):
     """ Masks randomly chosen spans. """ 
@@ -470,7 +476,8 @@ class GradientMasker(Masker):
         temp_tokenizer = self.predictor._dataset_reader._tokenizer
         all_predic_toks = temp_tokenizer.tokenize(editable_seg)
         
-        ner_words, ner_toks = self.ner_masker(editable_seg, all_predic_toks)
+        search_for = 'ADJ'
+        all_ner_toks, ner_found = self.ner_masker(editable_seg, all_predic_toks, search_for)
         
         # TODO: Does NOT work for RACE
         # If labeled_instance is not supplied, create one
@@ -541,15 +548,15 @@ class GradientMasker(Masker):
 
         logger = logging.getLogger("my-logger")
         logger.info(f"All_predic_toks: {str(all_predic_toks)}")
-        logger.info(f"All ner toks: {str(ner_words)}")
-        logger.info(f"All ner labels: {str(ner_toks)}")
-        logger.info(f"All_predic_toks: {str(len(all_predic_toks))} Ner toks: {str(len(ner_toks))}")
+        logger.info(f"All new toks: {str(all_ner_toks)}")
+        logger.info(f"All {search_for} toks: {str(ner_found)}")
+        logger.info(f"All_predic_toks: {str(len(all_predic_toks))} Ner toks: {str(len(ner_found))}")
 
         # List of tuples of (start, end) positions in the original inp to mask
         ordered_word_indices_by_grad = [self._get_word_positions(
             all_predic_toks[idx], editor_toks)[0] \
                     for idx in ordered_predic_tok_indices \
-                    if all_predic_toks[idx] not in self.predictor_special_toks and ner_toks[idx]==1]
+                    if all_predic_toks[idx] not in self.predictor_special_toks and (all_ner_toks[idx] in ner_found)]
         ordered_word_indices_by_grad = [item for sublist in \
                 ordered_word_indices_by_grad for item in sublist]
         

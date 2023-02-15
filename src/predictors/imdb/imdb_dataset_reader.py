@@ -88,10 +88,10 @@ class ImdbDatasetReader(DatasetReader):
             path = chain(Path(cache_dir.joinpath(unsup_dir)).glob('*.txt'))
         else:
             raise ValueError(f"Invalid option for file_path.")
-        return path
+        return sorted(path)
     
     def get_inputs(self, file_path, return_labels = False):
-        np.random.seed(self.random_seed)
+        #np.random.seed(self.random_seed)
         
         path_lst = list(self.get_path(file_path))
         strings = [None] * len(path_lst)
@@ -106,7 +106,7 @@ class ImdbDatasetReader(DatasetReader):
 
     @overrides
     def _read(self, file_path):
-        np.random.seed(self.random_seed)
+        #np.random.seed(self.random_seed)
         tar_path = cached_path(self.TAR_URL)
         tf = tarfile.open(tar_path, 'r')
         cache_dir = Path(osp.dirname(tar_path))

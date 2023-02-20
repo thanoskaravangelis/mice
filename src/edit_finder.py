@@ -162,7 +162,8 @@ class EditFinder():
         search_method = "binary", 
         max_mask_frac = 0.5, 
         max_search_levels = 10, 
-        verbose = True 
+        verbose = True,
+        targeted_pos_tag = "ADJ"
     ):
         self.predictor = predictor
         self.editor = editor
@@ -173,6 +174,7 @@ class EditFinder():
         self.device = get_device()
         self.verbose = verbose
         self.max_mask_frac = max_mask_frac 
+        self.targeted_pos_tag = targeted_pos_tag
 
     def run_edit_round(
         self, 
@@ -408,7 +410,7 @@ class EditFinder():
                     pred_idx = contrast_pred_idx
 
                 sorted_token_indices = self.editor.get_sorted_token_indices(
-                        input_cand, pred_idx)
+                        input_cand, pred_idx, self.targeted_pos_tag)
 
                 if self.search_method == "binary":
                     self.binary_search_edit(edit_list, input_cand, 

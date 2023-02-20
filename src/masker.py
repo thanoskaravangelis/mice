@@ -151,7 +151,7 @@ class Masker():
 
         return grpd_editor_mask_indices, editor_mask_indices, masked_seg, label
     
-    def ner_masker(self, editable_seg, all_predic_toks, search):
+    def ner_masker(self, editable_seg, all_predic_toks, pos_tag):
         text = nlp(editable_seg)
         after_ner_tuples_lst = []
         # List of all tokens without the space token used by the T5Tokenizer -> 'Ġ'
@@ -161,11 +161,11 @@ class Masker():
         for token in text:
             token_text = str(token.text)
             if token_text in all_predic_new:
-                if token.pos_==search:
+                if token.pos_==pos_tag:
                     after_ner_tuples_lst.append((token_text))
             elif token_text in list(zip(*all_predic_with_next))[0]:
                 idx = list(zip(*all_predic_with_next))[0].index(token_text)
-                if token.pos_==search:
+                if token.pos_==pos_tag:
                     after_ner_tuples_lst.append(all_predic_with_next[idx][1])
                     after_ner_tuples_lst.append(all_predic_with_next[idx][2])
 
@@ -437,6 +437,7 @@ class GradientMasker(Masker):
         
     def get_important_editor_tokens(
             self, editable_seg, pred_idx, editor_toks,
+            targeted_pos_tag,
             labeled_instance=None, 
             predic_tok_start_idx=None, 
             predic_tok_end_idx=None, 
@@ -450,6 +451,8 @@ class GradientMasker(Masker):
             Index of label (in Predictor label space) to take gradient of. 
         editor_toks: 
             Tokenized words using Editor tokenizer
+        targeted_pos_tag:
+            POS tag to be targeted for token masking
         labeled_instance:
             Instance object for Predictor
         predic_tok_start_idx:
@@ -476,8 +479,7 @@ class GradientMasker(Masker):
         temp_tokenizer = self.predictor._dataset_reader._tokenizer
         all_predic_toks = temp_tokenizer.tokenize(editable_seg)
         
-        search_for = 'ADJ'
-        all_ner_toks, ner_found = self.ner_masker(editable_seg, all_predic_toks, search_for)
+        all_ner_toks, ner_found = self.ner_masker(editable_seg, all_predic_toks, targeted_pos_tag)
         
         # TODO: Does NOT work for RACE
         # If labeled_instance is not supplied, create one
@@ -549,7 +551,7 @@ class GradientMasker(Masker):
         logger = logging.getLogger("my-logger")
         logger.info(f"All_predic_toks: {str(all_predic_toks)}")
         logger.info(f"All new toks: {str(all_ner_toks)}")
-        logger.info(f"All {search_for} toks: {str(ner_found)}")
+        logger.info(f"All {targeted_pos_tag} toks: {str(ner_found)}")
         logger.info(f"All_predic_toks: {str(len(all_predic_toks))} Ner toks: {str(len(ner_found))}")
 
         # List of tuples of (start, end) positions in the original inp to mask

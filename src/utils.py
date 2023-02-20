@@ -137,6 +137,10 @@ def get_parsers_by_stage(stage="stage1"):
         parsers["meta"].add_argument("-stage2_exp", required=True, 
                 help='Stage 2 experiment name. Used to create subdir within \
                         stage 1 directory for editing results.')
+        parsers["meta"].add_argument("-targeted_pos_tag", required=True,
+                help='POS tag that will be targeted for masking in the \
+                        generation of the edits. \
+                        Could be one of: ["ADJ", "VERB", "NOUN", "ADV"]')
     return parsers
 
 def get_args(stage):

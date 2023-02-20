@@ -108,13 +108,13 @@ class Editor():
             return instance, [None] 
         return instance
 
-    def get_sorted_token_indices(self, inp, grad_pred_idx):
+    def get_sorted_token_indices(self, inp, grad_pred_idx, targeted_pos_tag):
         """ Get token indices to mask, sorted by gradient value """
 
         editable_seg = self.get_editable_seg_from_input(inp)
         editable_toks = self.tokenizer_wrapper.tokenize(editable_seg)[:-1]
         sorted_token_indices = self.masker.get_important_editor_tokens(
-                editable_seg, grad_pred_idx, editable_toks, 
+                editable_seg, grad_pred_idx, editable_toks, targeted_pos_tag,
                 num_return_toks = len(editable_toks)
                 )
         return sorted_token_indices 

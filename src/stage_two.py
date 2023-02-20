@@ -127,12 +127,14 @@ def run_edit_test(args):
 
     task_dir = os.path.join(args.meta.results_dir, args.meta.task)
     stage_two_dir = os.path.join(task_dir, f"edits/{args.meta.stage2_exp}")
+    targeted_pos_tag = args.meta.targeted_pos_tag
    
     if not os.path.exists(stage_two_dir):
         os.makedirs(stage_two_dir)
 
     logger.info(f"Task dir: {task_dir}")
     logger.info(f"Stage two dir: {stage_two_dir}")
+    logger.info(f"Targeted POS tag: {targeted_pos_tag}")
 
     # Save args
     args_path = os.path.join(stage_two_dir, "stage_two_args.json")
@@ -151,7 +153,8 @@ def run_edit_test(args):
             beam_width=args.search.beam_width, 
             max_mask_frac=args.search.max_mask_frac,
             search_method=args.search.search_method,
-            max_search_levels=args.search.max_search_levels)
+            max_search_levels=args.search.max_search_levels,
+            targeted_pos_tag=targeted_pos_tag)
 
     # Get inputs
     inputs = dr.get_inputs('test')

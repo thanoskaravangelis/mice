@@ -158,14 +158,16 @@ class Masker():
         all_predic_new = [str(str(tok).replace('Ġ','')) for tok in all_predic_toks]
         # List of all tokens united with the following token due to unexpected 'splits' of tokens e.g. ['app','le']->['apple']
         all_predic_with_next = [(all_predic_new[i]+all_predic_new[i+1], all_predic_new[i], all_predic_new[i+1])  for i in range(len(all_predic_new)-1)]
+        # If pos_tag is PRON (I, You...) then also include pronouns in the targeted POS tags (names etc.)
+        pos_tags = [pos_tag, 'PROPN'] if pos_tag=='PRON' else [pos_tag]
         for token in text:
             token_text = str(token.text)
             if token_text in all_predic_new:
-                if token.pos_==pos_tag:
+                if token.pos_ in pos_tags:
                     after_ner_tuples_lst.append((token_text))
             elif token_text in list(zip(*all_predic_with_next))[0]:
                 idx = list(zip(*all_predic_with_next))[0].index(token_text)
-                if token.pos_==pos_tag:
+                if token.pos_ in pos_tags:
                     after_ner_tuples_lst.append(all_predic_with_next[idx][1])
                     after_ner_tuples_lst.append(all_predic_with_next[idx][2])
 

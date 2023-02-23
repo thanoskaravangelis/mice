@@ -88,11 +88,9 @@ def load_models(args):
     sign_direction = get_grad_sign_direction(
             args.mask.grad_type, args.misc.grad_pred) 
     
-    masker = GradientMasker(args.search.max_mask_frac, 
+    masker = RandomMasker(args.search.max_mask_frac, 
             editor_tokenizer_wrapper, predictor, 
-            args.model.model_max_length,
-            grad_type=args.mask.grad_type, 
-            sign_direction=sign_direction)
+            args.model.model_max_length)
 
     if "race" in args.meta.task:
         editor = RaceEditor(editor_tokenizer_wrapper, editor_tokenizer, 
@@ -148,7 +146,7 @@ def run_edit_test(args):
     # Load models and Edit objects 
     editor, predictor = load_models(args)
     dr = get_dataset_reader(args.meta.task, predictor)
-    edit_evaluator = EditEvaluator()
+    edit_evaluator = EditEvaluator(predictor)
     edit_finder = EditFinder(predictor, editor, 
             beam_width=args.search.beam_width, 
             max_mask_frac=args.search.max_mask_frac,

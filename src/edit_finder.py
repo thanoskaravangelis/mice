@@ -49,15 +49,15 @@ def get_max_instance(instance_candidates, contrast_pred_idx):
 class EditEvaluator():
     def __init__(
         self,
-        fluency_model_name = "t5-base",
-        fluency_masker = RandomMasker(None, SpacyTokenizer(), 512) 
+        predictor,
+        fluency_model_name = "t5-base" 
     ):
         self.device = get_device()
         self.fluency_model = T5ForConditionalGeneration.from_pretrained(
                 fluency_model_name).to(self.device)
         self.fluency_tokenizer = T5Tokenizer.from_pretrained(
                 fluency_model_name)
-        self.fluency_masker = fluency_masker 
+        self.fluency_masker = RandomMasker(None, SpacyTokenizer(), predictor, 512) 
 
     def score_fluency(self, sent):
         temp_losses = []
@@ -409,8 +409,8 @@ class EditFinder():
                 elif self.editor.grad_pred == "contrast":
                     pred_idx = contrast_pred_idx
 
-                sorted_token_indices = self.editor.get_sorted_token_indices(
-                        input_cand, pred_idx, self.targeted_pos_tag)
+                sorted_token_indices = None #self.editor.get_sorted_token_indices(
+                        #input_cand, pred_idx, self.targeted_pos_tag)
 
                 if self.search_method == "binary":
                     self.binary_search_edit(edit_list, input_cand, 

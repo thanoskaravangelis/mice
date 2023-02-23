@@ -37,11 +37,13 @@ class Masker():
     
     def __init__(
             self,
-            mask_frac, 
+            mask_frac,
             editor_tok_wrapper, 
-            max_tokens
+            predictor,
+            max_tokens,
         ):
         self.mask_frac = mask_frac
+        self.predictor = predictor
         self.editor_tok_wrapper = editor_tok_wrapper
         self.max_tokens = max_tokens
         
@@ -179,10 +181,11 @@ class RandomMasker(Masker):
     def __init__(
             self, 
             mask_frac, 
-            editor_tok_wrapper, 
+            editor_tok_wrapper,
+            predictor, 
             max_tokens
         ):
-        super().__init__(mask_frac, editor_tok_wrapper, max_tokens)
+        super().__init__(mask_frac, editor_tok_wrapper, predictor, max_tokens)
    
     def _get_mask_indices(self, editable_seg, editor_toks, pred_idx, **kwargs):
         """ Helper function to get indices of Editor tokens to mask. """

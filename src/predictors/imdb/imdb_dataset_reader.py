@@ -50,13 +50,14 @@ class ImdbDatasetReader(DatasetReader):
 
         self.random_seed = 0 # numpy random seed
 
-    def get_path(self, file_path):
+    def get_path(self, file_path, inputs_path):
         tar_path = cached_path(self.TAR_URL)
         tf = tarfile.open(tar_path, 'r')
         cache_dir = Path(osp.dirname(tar_path))
         if not (cache_dir / self.TRAIN_DIR).exists() and \
                 not (cache_dir / self.TEST_DIR).exists():
             tf.extractall(cache_dir)
+        
 
         if file_path == 'train':
             pos_dir = osp.join(self.TRAIN_DIR, 'pos')
@@ -78,11 +79,11 @@ class ImdbDatasetReader(DatasetReader):
             val_path = path_lst[num_train_strings:]
             path = train_path if file_path == "train" else val_path
         elif file_path == 'test':
-            pos_dir = osp.join(self.TEST_DIR, 'pos')
-            neg_dir = osp.join(self.TEST_DIR, 'neg')
+            pos_dir = osp.join(inputs_path, 'pos')
+            neg_dir = osp.join(inputs_path, 'neg')
             path = chain(
-                    Path(cache_dir.joinpath(pos_dir)).glob('*.txt'), 
-                    Path(cache_dir.joinpath(neg_dir)).glob('*.txt'))
+                    Path(pos_dir).glob('*.txt'), 
+                    Path(neg_dir).glob('*.txt'))
         elif file_path == "unlabeled":
             unsup_dir = osp.join(self.TRAIN_DIR, 'unsup')
             path = chain(Path(cache_dir.joinpath(unsup_dir)).glob('*.txt'))
@@ -90,10 +91,10 @@ class ImdbDatasetReader(DatasetReader):
             raise ValueError(f"Invalid option for file_path.")
         return sorted(path)
     
-    def get_inputs(self, file_path, return_labels = False):
+    def get_inputs(self, file_path, inputs_path, return_labels = False):
         #np.random.seed(self.random_seed)
         
-        path_lst = list(self.get_path(file_path))
+        path_lst = list(self.get_path(file_path, inputs_path))
         strings = [None] * len(path_lst)
         labels = [None] * len(path_lst)
         for i, p in enumerate(path_lst):

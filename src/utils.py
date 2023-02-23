@@ -141,6 +141,10 @@ def get_parsers_by_stage(stage="stage1"):
                 help='POS tag that will be targeted for masking in the \
                         generation of the edits. \
                         Could be one of: ["ADJ", "VERB", "NOUN", "ADV"]')
+        parsers["meta"].add_argument("-inputs_path",
+                help='Absolute path of the folder that the test inputs will be read from. \
+                        Must contain two subfolders: pos, neg with the positive \
+                        and negative inputs accordingly.')
     return parsers
 
 def get_args(stage):

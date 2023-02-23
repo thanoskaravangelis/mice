@@ -157,7 +157,7 @@ def run_edit_test(args):
             targeted_pos_tag=targeted_pos_tag)
 
     # Get inputs
-    inputs = dr.get_inputs('test')
+    inputs = dr.get_inputs('test', args.meta.inputs_path)
     if "race" not in args.meta.task:
         inputs = [x for x in inputs if len(x) > 0 and re.search('[a-zA-Z]', x)]
 

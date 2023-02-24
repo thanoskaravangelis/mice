@@ -409,7 +409,7 @@ class EditFinder():
                 elif self.editor.grad_pred == "contrast":
                     pred_idx = contrast_pred_idx
 
-                sorted_token_indices = None #self.editor.get_sorted_token_indices(
+                sorted_token_indices = range(num_toks) #self.editor.get_sorted_token_indices(
                         #input_cand, pred_idx, self.targeted_pos_tag)
 
                 if self.search_method == "binary":

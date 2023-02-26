@@ -11,9 +11,8 @@ import torch
 import torch.nn.functional as F
 from torch import backends
 
-import spacy
-
-nlp = spacy.load('en_core_web_sm')
+#import spacy
+#nlp = spacy.load('en_core_web_sm')
 
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
 logging.basicConfig(format=FORMAT)

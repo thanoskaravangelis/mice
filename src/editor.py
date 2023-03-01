@@ -176,7 +176,7 @@ class Editor():
                     self.masker.get_masked_string(inp, grad_pred_idx)
 
         max_length = math.ceil((self.masker.mask_frac + 0.2) * \
-                len(tokens))
+                len(sorted_token_indices))
         num_spans = len(grouped_ind_to_mask)
 
         return num_spans, token_ind_to_mask, masked_inp, orig_spans, max_length

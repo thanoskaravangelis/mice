@@ -18,6 +18,7 @@ import logging
 import os
 import heapq
 import difflib
+import random
 
 from transformers import T5Tokenizer, T5Model, T5Config
 from transformers import T5ForConditionalGeneration
@@ -409,7 +410,9 @@ class EditFinder():
                 elif self.editor.grad_pred == "contrast":
                     pred_idx = contrast_pred_idx
 
-                sorted_token_indices = range(num_toks) #self.editor.get_sorted_token_indices(
+                indices = list(range(num_toks-1))
+                random.shuffle(indices)
+                sorted_token_indices = indices #self.editor.get_sorted_token_indices(
                         #input_cand, pred_idx, self.targeted_pos_tag)
 
                 if self.search_method == "binary":

@@ -10,16 +10,13 @@ from allennlp.nn import util
 import torch
 import torch.nn.functional as F
 from torch import backends
-from src.utils import *
 
+import spacy
 
-#import spacy
-#nlp = spacy.load('en_core_web_sm')
+nlp = spacy.load('en_core_web_sm')
 
-logger = logging.getLogger("my-logger")
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
 logging.basicConfig(format=FORMAT)
-logger.setLevel(logging.INFO)
 
 class MaskError(Exception):
     pass
@@ -133,8 +130,6 @@ class Masker():
         label = Masker._get_sentinel_token(len(grpd_editor_mask_indices))
         masked_seg = editable_seg
 
-        logger.info(f"Length of grouped is: {len(grpd_editor_mask_indices)} \
-                              and these are: {grpd_editor_mask_indices}")
         # Iterate over spans in reverse order and mask tokens
         for span in grpd_editor_mask_indices[::-1]:
 

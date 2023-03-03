@@ -17,6 +17,8 @@ nlp = spacy.load('en_core_web_sm')
 
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
 logging.basicConfig(format=FORMAT)
+logger = logging.getLogger("my-logger")
+logger.setLevel(logging.INFO)
 
 class MaskError(Exception):
     pass
@@ -132,7 +134,7 @@ class Masker():
 
         # Iterate over spans in reverse order and mask tokens
         for span in grpd_editor_mask_indices[::-1]:
-
+            
             span_char_start = editor_toks[span[0]].idx
             span_char_end = editor_toks[span[-1]].idx_end
             end_token_idx = span[-1]
@@ -190,9 +192,10 @@ class RandomMasker(Masker):
     def _get_mask_indices(self, editable_seg, editor_toks, pred_idx, **kwargs):
         """ Helper function to get indices of Editor tokens to mask. """
         
+        #Range is one token indice less , as there was an error in get_masked_string with the last span
         num_tokens = min(self.max_tokens, len(editor_toks))
         return random.sample(
-                range(num_tokens), math.ceil(self.mask_frac * num_tokens))
+                range(num_tokens-1), math.ceil(self.mask_frac * num_tokens))
     
 class GradientMasker(Masker):
     """ Masks spans based on gradients of Predictor wrt. given predicted label.

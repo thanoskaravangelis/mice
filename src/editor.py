@@ -677,7 +677,7 @@ class RaceEditor(Editor):
 
         num_spans = len(grouped_ind_to_mask)
         max_length = math.ceil(
-                (self.masker.mask_frac+0.2) * len(sorted_token_indices))
+                (self.masker.mask_frac+0.2) * len(tokens))
 
         masked_inp = masked_inp.replace(self.tokenizer.eos_token, " ")
         return num_spans, token_ind_to_mask, masked_inp, orig_spans, max_length

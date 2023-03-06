@@ -90,7 +90,8 @@ def load_models(args):
     
     masker = RandomMasker(args.search.max_mask_frac, 
             editor_tokenizer_wrapper, predictor, 
-            args.model.model_max_length)
+            args.model.model_max_length,
+            args.meta.targeted_pos_tag)
 
     if "race" in args.meta.task:
         editor = RaceEditor(editor_tokenizer_wrapper, editor_tokenizer, 
@@ -146,7 +147,7 @@ def run_edit_test(args):
     # Load models and Edit objects 
     editor, predictor = load_models(args)
     dr = get_dataset_reader(args.meta.task, predictor)
-    edit_evaluator = EditEvaluator(predictor)
+    edit_evaluator = EditEvaluator(predictor, targeted_pos_tag)
     edit_finder = EditFinder(predictor, editor, 
             beam_width=args.search.beam_width, 
             max_mask_frac=args.search.max_mask_frac,

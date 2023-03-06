@@ -48,6 +48,16 @@ class Masker():
         self.predictor = predictor
         self.editor_tok_wrapper = editor_tok_wrapper
         self.max_tokens = max_tokens
+
+        temp_tokenizer = self.predictor._dataset_reader._tokenizer
+
+        # Used later to avoid skipping special tokens like <s>
+        self.predictor_special_toks = \
+                temp_tokenizer.sequence_pair_start_tokens + \
+                temp_tokenizer.sequence_pair_mid_tokens + \
+                temp_tokenizer.sequence_pair_end_tokens + \
+                temp_tokenizer.single_sequence_start_tokens + \
+                temp_tokenizer.single_sequence_end_tokens
         
     def _get_mask_indices(self, editor_toks):
         """ Helper function to get indices of Editor tokens to mask. """
@@ -116,206 +126,6 @@ class Masker():
         grouped_editor_mask_indices = grouped_editor_mask_indices[:99]
         return grouped_editor_mask_indices
 
-    def get_masked_string(
-            self, editable_seg, pred_idx, 
-            editor_mask_indices = None, **kwargs):
-        """ Gets masked string masking tokens w highest predictor gradients.
-        Requires mapping predictor tokens to Editor tokens because edits are
-        made on Editor tokens. """
-
-        editor_toks = self.editor_tok_wrapper.tokenize(editable_seg)
-        grpd_editor_mask_indices = self._get_grouped_mask_indices(
-                editable_seg, pred_idx, editor_mask_indices, 
-                editor_toks, **kwargs)
-        
-        span_idx = len(grpd_editor_mask_indices) - 1
-        label = Masker._get_sentinel_token(len(grpd_editor_mask_indices))
-        masked_seg = editable_seg
-
-        # Iterate over spans in reverse order and mask tokens
-        for span in grpd_editor_mask_indices[::-1]:
-            
-            span_char_start = editor_toks[span[0]].idx
-            span_char_end = editor_toks[span[-1]].idx_end
-            end_token_idx = span[-1]
-
-            # If last span tok is last t5 tok, heuristically set char end idx
-            if span_char_end is None and end_token_idx == len(editor_toks)-1:
-                span_char_end = span_char_start + 1
-
-            if not span_char_end > span_char_start:
-                raise MaskError
-                
-            label = Masker._get_sentinel_token(span_idx) + \
-                    masked_seg[span_char_start:span_char_end] + label
-            masked_seg = masked_seg[:span_char_start] + \
-                    Masker._get_sentinel_token(span_idx) + \
-                    masked_seg[span_char_end:]
-            span_idx -= 1    
-
-        return grpd_editor_mask_indices, editor_mask_indices, masked_seg, label
-    
-    def ner_masker(self, editable_seg, all_predic_toks, pos_tag):
-        text = nlp(editable_seg)
-        after_ner_tuples_lst = []
-        # List of all tokens without the space token used by the T5Tokenizer -> 'Ġ'
-        all_predic_new = [str(str(tok).replace('Ġ','')) for tok in all_predic_toks]
-        # List of all tokens united with the following token due to unexpected 'splits' of tokens e.g. ['app','le']->['apple']
-        all_predic_with_next = [(all_predic_new[i]+all_predic_new[i+1], all_predic_new[i], all_predic_new[i+1])  for i in range(len(all_predic_new)-1)]
-        # If pos_tag is PRON (I, You...) then also include pronouns in the targeted POS tags (names etc.)
-        pos_tags = [pos_tag, 'PROPN'] if pos_tag=='PRON' else [pos_tag]
-        for token in text:
-            token_text = str(token.text)
-            if token_text in all_predic_new:
-                if token.pos_ in pos_tags:
-                    after_ner_tuples_lst.append((token_text))
-            elif token_text in list(zip(*all_predic_with_next))[0]:
-                idx = list(zip(*all_predic_with_next))[0].index(token_text)
-                if token.pos_ in pos_tags:
-                    after_ner_tuples_lst.append(all_predic_with_next[idx][1])
-                    after_ner_tuples_lst.append(all_predic_with_next[idx][2])
-
-        return all_predic_new, after_ner_tuples_lst
-            
-class RandomMasker(Masker):
-    """ Masks randomly chosen spans. """ 
-    
-    def __init__(
-            self, 
-            mask_frac, 
-            editor_tok_wrapper,
-            predictor, 
-            max_tokens
-        ):
-        super().__init__(mask_frac, editor_tok_wrapper, predictor, max_tokens)
-   
-    def _get_mask_indices(self, editable_seg, editor_toks, pred_idx, **kwargs):
-        """ Helper function to get indices of Editor tokens to mask. """
-        
-        #Range is one token indice less , as there was an error in get_masked_string with the last span
-        num_tokens = min(self.max_tokens, len(editor_toks))
-        return random.sample(
-                range(num_tokens-1), math.ceil(self.mask_frac * num_tokens))
-    
-class GradientMasker(Masker):
-    """ Masks spans based on gradients of Predictor wrt. given predicted label.
-
-    mask_frac: float 
-        Fraction of input tokens to mask.
-    editor_to_wrapper: allennlp.data.tokenizers.tokenizer 
-        Wraps around Editor tokenizer.
-        Has capabilities for mapping Predictor tokens to Editor tokens.
-    max_tokens: int
-        Maximum number of tokens a masked input should have.
-    grad_type: str, one of ["integrated_l1", "integrated_signed", 
-            "normal_l1", "normal_signed", "normal_l2", "integrated_l2"]
-        Specifies how gradient value should be calculated
-            Integrated vs. normal:
-                Integrated: https://arxiv.org/pdf/1703.01365.pdf
-                Normal: 'Vanilla' gradient
-            Signed vs. l1 vs. l2:
-                Signed: Sum gradients over embedding dimension.
-                l1: Take l1 norm over embedding dimension.
-                l2: Take l2 norm over embedding dimension.
-    sign_direction: One of [-1, 1, None]
-        When grad_type is signed, determines whether we want to get most 
-        negative or positive gradient values. 
-        This should depend on what label is being used 
-        (pred_idx argument to get_masked_string).
-        For example, Stage One, we want to mask tokens that push *towards* 
-        gold label, whereas during Stage Two, we want to mask tokens that 
-        push *away* from the target label. 
-        Sign direction plays no role if only gradient *magnitudes* are used 
-        (i.e. if grad_type is not signed, but involves taking the l1/l2 norm.) 
-    num_integrated_grad_steps: int
-        Hyperparameter for integrated gradients. 
-        Only used when grad_type is one of integrated types.
-    """
-    
-    def __init__(
-            self, 
-            mask_frac, 
-            editor_tok_wrapper, 
-            predictor, 
-            max_tokens, 
-            grad_type = "normal_l2", 
-            sign_direction = None,
-            num_integrated_grad_steps = 10
-        ):
-        super().__init__(mask_frac, editor_tok_wrapper, max_tokens)
-        
-        self.predictor = predictor
-        self.grad_type = grad_type
-        self.num_integrated_grad_steps = num_integrated_grad_steps
-        self.sign_direction = sign_direction
-
-        if ("signed" in self.grad_type and sign_direction is None):
-            error_msg = "To calculate a signed gradient value, need to " + \
-                    "specify sign direction but got None for sign_direction"
-            raise ValueError(error_msg)
-
-        if sign_direction not in [1, -1, None]:
-            error_msg = f"Invalid value for sign_direction: {sign_direction}"
-            raise ValueError(error_msg)
-        
-        temp_tokenizer = self.predictor._dataset_reader._tokenizer
-
-        # Used later to avoid skipping special tokens like <s>
-        self.predictor_special_toks = \
-                temp_tokenizer.sequence_pair_start_tokens + \
-                temp_tokenizer.sequence_pair_mid_tokens + \
-                temp_tokenizer.sequence_pair_end_tokens + \
-                temp_tokenizer.single_sequence_start_tokens + \
-                temp_tokenizer.single_sequence_end_tokens
-
-    def _get_gradients_by_prob(self, instance, pred_idx):
-        """ Helper function to get gradient values of predicted logit 
-        Largely copied from Predictor class of AllenNLP """
-
-        instances = [instance]
-        original_param_name_to_requires_grad_dict = {}
-        for param_name, param in self.predictor._model.named_parameters():
-            original_param_name_to_requires_grad_dict[param_name] = \
-                    param.requires_grad
-            param.requires_grad = True
-
-        embedding_gradients: List[Tensor] = []
-        hooks: List[RemovableHandle] = \
-                self.predictor._register_embedding_gradient_hooks(
-                        embedding_gradients)
-        
-        dataset = Batch(instances)
-        dataset.index_instances(self.predictor._model.vocab)
-        dataset_tensor_dict = util.move_to_device(
-                dataset.as_tensor_dict(), self.predictor.cuda_device)
-        with backends.cudnn.flags(enabled=False):
-            outputs = self.predictor._model.make_output_human_readable(
-                self.predictor._model.forward(**dataset_tensor_dict) 
-            )
-
-            # Differs here
-            prob = outputs["logits"][0][pred_idx] 
-
-            self.predictor._model.zero_grad()
-            prob.backward()
-
-        for hook in hooks:
-            hook.remove()
-
-        grad_dict = dict()
-        for idx, grad in enumerate(embedding_gradients):
-            key = "grad_input_" + str(idx + 1)
-            grad_dict[key] = grad.detach().cpu().numpy()
-
-        # Restore original requires_grad values of the parameters
-        for param_name, param in self.predictor._model.named_parameters():
-            param.requires_grad = \
-                    original_param_name_to_requires_grad_dict[param_name]
-        
-        del dataset_tensor_dict
-        torch.cuda.empty_cache()
-        return grad_dict, outputs
-    
     def _get_word_positions(self, predic_tok, editor_toks):
         """ Helper function to map from (sub)tokens of Predictor to 
         token indices of Editor tokenizer. Assumes the tokens are in order.
@@ -388,6 +198,210 @@ class GradientMasker(Masker):
                             [editor_toks[return_word_idx].idx], 
                             [editor_toks[return_word_idx].idx_end])
         return return_tuple
+
+    def get_masked_string(
+            self, editable_seg, pred_idx, 
+            editor_mask_indices = None, **kwargs):
+        """ Gets masked string masking tokens w highest predictor gradients.
+        Requires mapping predictor tokens to Editor tokens because edits are
+        made on Editor tokens. """
+
+        editor_toks = self.editor_tok_wrapper.tokenize(editable_seg)
+        grpd_editor_mask_indices = self._get_grouped_mask_indices(
+                editable_seg, pred_idx, editor_mask_indices, 
+                editor_toks, **kwargs)
+        
+        span_idx = len(grpd_editor_mask_indices) - 1
+        label = Masker._get_sentinel_token(len(grpd_editor_mask_indices))
+        masked_seg = editable_seg
+
+        # Iterate over spans in reverse order and mask tokens
+        for span in grpd_editor_mask_indices[::-1]:
+            
+            span_char_start = editor_toks[span[0]].idx
+            span_char_end = editor_toks[span[-1]].idx_end
+            end_token_idx = span[-1]
+
+            # If last span tok is last t5 tok, heuristically set char end idx
+            if span_char_end is None and end_token_idx == len(editor_toks)-1:
+                span_char_end = span_char_start + 1
+
+            if not span_char_end > span_char_start:
+                raise MaskError
+                
+            label = Masker._get_sentinel_token(span_idx) + \
+                    masked_seg[span_char_start:span_char_end] + label
+            masked_seg = masked_seg[:span_char_start] + \
+                    Masker._get_sentinel_token(span_idx) + \
+                    masked_seg[span_char_end:]
+            span_idx -= 1    
+
+        return grpd_editor_mask_indices, editor_mask_indices, masked_seg, label
+    
+    def ner_masker(self, editable_seg, all_predic_toks, pos_tag):
+        text = nlp(editable_seg)
+        after_ner_tuples_lst = []
+        # List of all tokens without the space token used by the T5Tokenizer -> 'Ġ'
+        all_predic_new = [str(str(tok).replace('Ġ','')) for tok in all_predic_toks]
+        # List of all tokens united with the following token due to unexpected 'splits' of tokens e.g. ['app','le']->['apple']
+        all_predic_with_next = [(all_predic_new[i]+all_predic_new[i+1], all_predic_new[i], all_predic_new[i+1])  for i in range(len(all_predic_new)-1)]
+        # If pos_tag is PRON (I, You...) then also include pronouns in the targeted POS tags (names etc.)
+        pos_tags = [pos_tag, 'PROPN'] if pos_tag=='PRON' else [pos_tag]
+        for token in text:
+            token_text = str(token.text)
+            if token_text in all_predic_new:
+                if token.pos_ in pos_tags:
+                    after_ner_tuples_lst.append((token_text))
+            elif token_text in list(zip(*all_predic_with_next))[0]:
+                idx = list(zip(*all_predic_with_next))[0].index(token_text)
+                if token.pos_ in pos_tags:
+                    after_ner_tuples_lst.append(all_predic_with_next[idx][1])
+                    after_ner_tuples_lst.append(all_predic_with_next[idx][2])
+
+        return all_predic_new, after_ner_tuples_lst
+            
+class RandomMasker(Masker):
+    """ Masks randomly chosen spans. """ 
+    
+    def __init__(
+            self, 
+            mask_frac, 
+            editor_tok_wrapper,
+            predictor, 
+            max_tokens,
+            targeted_pos_tag
+        ):
+        super().__init__(mask_frac, editor_tok_wrapper, predictor, max_tokens)
+        self.targeted_pos_tag = targeted_pos_tag
+
+    def _get_mask_indices(self, editable_seg, editor_toks, pred_idx, **kwargs):
+        """ Helper function to get indices of Editor tokens to mask. """
+        temp_tokenizer = self.predictor._dataset_reader._tokenizer
+        all_predic_toks = temp_tokenizer.tokenize(editable_seg)
+
+        all_ner_toks, ner_found = self.ner_masker(editable_seg, all_predic_toks, self.targeted_pos_tag)
+        num_pos_tokens = min(self.max_tokens, len(ner_found))
+        #Range is one token indice less , as there was an error in get_masked_string with the last span
+        #num_tokens = min(self.max_tokens, len(editor_toks))
+
+        word_indices = [self._get_word_positions(
+            all_predic_toks[idx], editor_toks)[0] \
+                    for idx in range(len(all_predic_toks)) \
+                    if all_predic_toks[idx] not in self.predictor_special_toks and (all_ner_toks[idx] in ner_found)]
+        word_indices = [item for sublist in \
+                word_indices for item in sublist]
+        
+        return sorted(random.sample(
+                word_indices, math.ceil(self.mask_frac * num_pos_tokens)))
+    
+class GradientMasker(Masker):
+    """ Masks spans based on gradients of Predictor wrt. given predicted label.
+
+    mask_frac: float 
+        Fraction of input tokens to mask.
+    editor_to_wrapper: allennlp.data.tokenizers.tokenizer 
+        Wraps around Editor tokenizer.
+        Has capabilities for mapping Predictor tokens to Editor tokens.
+    max_tokens: int
+        Maximum number of tokens a masked input should have.
+    grad_type: str, one of ["integrated_l1", "integrated_signed", 
+            "normal_l1", "normal_signed", "normal_l2", "integrated_l2"]
+        Specifies how gradient value should be calculated
+            Integrated vs. normal:
+                Integrated: https://arxiv.org/pdf/1703.01365.pdf
+                Normal: 'Vanilla' gradient
+            Signed vs. l1 vs. l2:
+                Signed: Sum gradients over embedding dimension.
+                l1: Take l1 norm over embedding dimension.
+                l2: Take l2 norm over embedding dimension.
+    sign_direction: One of [-1, 1, None]
+        When grad_type is signed, determines whether we want to get most 
+        negative or positive gradient values. 
+        This should depend on what label is being used 
+        (pred_idx argument to get_masked_string).
+        For example, Stage One, we want to mask tokens that push *towards* 
+        gold label, whereas during Stage Two, we want to mask tokens that 
+        push *away* from the target label. 
+        Sign direction plays no role if only gradient *magnitudes* are used 
+        (i.e. if grad_type is not signed, but involves taking the l1/l2 norm.) 
+    num_integrated_grad_steps: int
+        Hyperparameter for integrated gradients. 
+        Only used when grad_type is one of integrated types.
+    """
+    
+    def __init__(
+            self, 
+            mask_frac, 
+            editor_tok_wrapper, 
+            predictor, 
+            max_tokens, 
+            grad_type = "normal_l2", 
+            sign_direction = None,
+            num_integrated_grad_steps = 10
+        ):
+        super().__init__(mask_frac, editor_tok_wrapper, max_tokens)
+        
+        self.predictor = predictor
+        self.grad_type = grad_type
+        self.num_integrated_grad_steps = num_integrated_grad_steps
+        self.sign_direction = sign_direction
+
+        if ("signed" in self.grad_type and sign_direction is None):
+            error_msg = "To calculate a signed gradient value, need to " + \
+                    "specify sign direction but got None for sign_direction"
+            raise ValueError(error_msg)
+
+        if sign_direction not in [1, -1, None]:
+            error_msg = f"Invalid value for sign_direction: {sign_direction}"
+            raise ValueError(error_msg)
+
+    def _get_gradients_by_prob(self, instance, pred_idx):
+        """ Helper function to get gradient values of predicted logit 
+        Largely copied from Predictor class of AllenNLP """
+
+        instances = [instance]
+        original_param_name_to_requires_grad_dict = {}
+        for param_name, param in self.predictor._model.named_parameters():
+            original_param_name_to_requires_grad_dict[param_name] = \
+                    param.requires_grad
+            param.requires_grad = True
+
+        embedding_gradients: List[Tensor] = []
+        hooks: List[RemovableHandle] = \
+                self.predictor._register_embedding_gradient_hooks(
+                        embedding_gradients)
+        
+        dataset = Batch(instances)
+        dataset.index_instances(self.predictor._model.vocab)
+        dataset_tensor_dict = util.move_to_device(
+                dataset.as_tensor_dict(), self.predictor.cuda_device)
+        with backends.cudnn.flags(enabled=False):
+            outputs = self.predictor._model.make_output_human_readable(
+                self.predictor._model.forward(**dataset_tensor_dict) 
+            )
+
+            # Differs here
+            prob = outputs["logits"][0][pred_idx] 
+
+            self.predictor._model.zero_grad()
+            prob.backward()
+
+        for hook in hooks:
+            hook.remove()
+
+        grad_dict = dict()
+        for idx, grad in enumerate(embedding_gradients):
+            key = "grad_input_" + str(idx + 1)
+            grad_dict[key] = grad.detach().cpu().numpy()
+
+        # Restore original requires_grad values of the parameters
+        for param_name, param in self.predictor._model.named_parameters():
+            param.requires_grad = \
+                    original_param_name_to_requires_grad_dict[param_name]
+        
+        del dataset_tensor_dict
+        torch.cuda.empty_cache()
+        return grad_dict, outputs
         
     # Copied from AllenNLP integrated gradient
     def _integrated_register_forward_hook(self, alpha, embeddings_list):

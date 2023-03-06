@@ -50,14 +50,15 @@ class EditEvaluator():
     def __init__(
         self,
         predictor,
-        fluency_model_name = "t5-base" 
+        targeted_pos_tag,
+        fluency_model_name = "t5-base"
     ):
         self.device = get_device()
         self.fluency_model = T5ForConditionalGeneration.from_pretrained(
                 fluency_model_name).to(self.device)
         self.fluency_tokenizer = T5Tokenizer.from_pretrained(
                 fluency_model_name)
-        self.fluency_masker = RandomMasker(None, SpacyTokenizer(), predictor, 512) 
+        self.fluency_masker = RandomMasker(None, SpacyTokenizer(), predictor, 512, targeted_pos_tag) 
 
     def score_fluency(self, sent):
         temp_losses = []
